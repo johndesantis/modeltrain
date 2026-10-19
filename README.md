@@ -1,33 +1,108 @@
-# Jailbreak classification notebook
+# Jailbreak prompt classification
 
-## Current result — important limitation
+Binary classification of prompts as **jailbreak** (`1`) or **benign** (`0`).
+`modeltrain.ipynb` trains the model, prints grouped cross-validation metrics,
+runs its own test suite, and exports `submission.csv` with `Id,TARGET`, where
+`TARGET` is the calibrated jailbreak likelihood in `[0, 1]`.
 
-The only supplied dataset is `jailbreak.csv`: **666 rows, all labeled `true`**.
-It has no benign examples, competition test prompts, or original prompt IDs/names.
-After case/Unicode/whitespace normalization, 648 unique prompts remain for fitting.
-The original input file is unchanged.
+## Result
 
-**It is not possible to train or validate a meaningful binary classifier from these
-labels alone.** No outside or fabricated training data is used. The notebook fits
-a single-class empirical-prior `DummyClassifier`. Consequently, every exported
-`jailbreak_probability` is **1.0**. These are constant baseline outputs, **not
-calibrated jailbreak risks**, perfect accuracy, or evidence of generalization.
-ROC-AUC is undefined and stored as `null`, not assigned a fictitious score.
+| Model | Grouped 5-fold CV ROC-AUC (2 seeds, 10 folds) |
+| --- | --- |
+| Baseline: word-unigram TF-IDF + logistic regression | **0.9418** ± 0.0075 |
+| **Ensemble (6 models, rank fusion)** | **0.9724** ± 0.0034 |
 
-`submissions.csv` is an export of the existing training rows, **not a leaderboard-ready
-submission**. No competition test set, sample submission schema, or leaderboard
-result was available.
+The ensemble improves the internal cross-validated ROC-AUC by **+0.0306** over
+the baseline. These numbers are *internal estimates*, not public leaderboard
+scores; test labels are not part of this repository. The previous submission
+referenced in issue #5 scored `0.94755` publicly, so this pipeline is a
+substantial modelling change rather than a re-export of the same model.
+
+## Data
+
+| File | Rows | Columns |
+| --- | --- | --- |
+| `train.csv` | 4,000 | `Id`, `text`, `label` (`benign` 2,401 / `jailbreak` 1,599) |
+| `test.csv` | 1,000 | `Id`, `text` |
+| `sample_submission.csv` | 1,000 | `Id`, `TARGET` |
+
+Every run performs these safeguards before training:
+
+- schema, missing-value, duplicate-id, and train/test id-disjoint checks;
+- strict label parsing (`benign`/`jailbreak`, `0`/`1`, `true`/`false`); unknown
+  labels and single-class training files abort the run;
+- Unicode NFKC normalisation, zero-width/bidi character removal, case and
+  whitespace unification;
+- exact-duplicate, near-duplicate, and conflicting-label detection (near
+  duplicates are grouped so they cannot leak across CV folds);
+- train/test near-duplicate audit (14 test prompts are ≥ 0.90 cosine-similar to
+  a training prompt);
+- output validation: exact `Id,TARGET` schema, matching id order, finite
+  scores, non-constant scores, and scores inside `[0, 1]`.
+
+## Method
+
+1. **Text normalisation** — NFKC, invisible character removal, lowercasing,
+   whitespace/newline cleanup. Punctuation is preserved because it carries
+   injection signal.
+2. **Word IDs** — every distinct token gets a stable integer id (21,017-word
+   vocabulary; 97.0% of test tokens are covered). Repeated words share an id,
+   unseen words map to `-1`.
+3. **Features** — a `FeatureUnion` of word TF-IDF (1–3-grams, 80,802 terms) and
+   character TF-IDF (2–6-grams, 113,222 terms), giving a 194,024-column sparse
+   matrix. Character n-grams catch obfuscation such as `ign0re`, spaced letters,
+   and punctuation tricks.
+4. **Prompt-injection safeguards** — 46 dense features covering 14 attack
+   families: instruction override, system-prompt probing, password/secret
+   extraction, repeat/reverse/encode requests, role-play, fictional framing,
+   unrestricted persona ("DAN", "no restrictions"), new directives, harmful
+   asks, compliance pressure, known benign benchmark formats, Gandalf-style
+   character probes, and injection formatting markers. These are appended to
+   the TF-IDF matrix for the boosting model and reported as a diagnostic table.
+5. **Base models**
+   - logistic regression (`C=32`),
+   - linear SVM (`C=1`),
+   - complement Naive Bayes (`alpha=0.3`),
+   - cosine k-NN with `k=10` and `k=20` (similarity-weighted),
+   - LightGBM (400 trees) on TF-IDF plus safeguard features.
+6. **Validation** — stratified **grouped** 5-fold CV, repeated with seeds 42 and
+   7. Near-duplicate prompts (character TF-IDF cosine ≥ 0.80) always share a
+   fold, so duplicate leakage cannot inflate the estimate.
+7. **Ensemble** — equal-weight percentile-rank fusion of the six models. Rank
+   fusion is scale-free, which matters because the SVM outputs margins while the
+   other models output probabilities.
+8. **Calibration** — Platt scaling fitted on the cross-validated ensemble ranks
+   maps the final test ranks into `[0, 1]` without changing their order (AUC is
+   rank-based).
+
+## Notebook cells
+
+`modeltrain.ipynb` contains **30 Python cells** (plus 11 markdown cells, 41 in
+total). Every cell is small and focused: environment, configuration, data
+loading/validation, normalisation, duplicates, word IDs, features, model
+factories, folds, baseline CV, ensemble CV, results, full training, test
+prediction, blending, calibration, export, validation, self-tests, report, and a
+final summary. The count is also printed by the last cell and stored in
+`training_report.json`.
 
 ## Files
 
-- `modeltrain.ipynb`: all data validation, training, evaluation, export, and self-tests;
-  saved with outputs from a successful fresh-kernel execution.
-- `submissions.csv`: all 666 input rows in their original order, including duplicates.
-- `training_report.json`: input checksum, model mode, class counts, evaluation
-  limitations, identifier provenance, and passed test names.
-- `execute_notebook.py`: executes the notebook in a fresh kernel using the active
-  Python interpreter, fails on cell errors, and saves successful execution outputs.
-- `requirements.txt`: exact dependency versions used for the verified run (Python 3.11).
+| File | Role |
+| --- | --- |
+| `modeltrain.ipynb` | End-to-end notebook, saved with outputs from a clean execution |
+| `step_01_config.py` | Paths, seeds, CV/folds, model hyper-parameters, blend weights |
+| `step_02_data.py` | CSV loading, label parsing, schema/id/disjointness validation |
+| `step_03_normalize.py` | Normalisation, tokenisation, word IDs, duplicate and conflict detection |
+| `step_04_features.py` | TF-IDF union, 46 safeguard features, diagnostic tables |
+| `step_05_models.py` | Model factories, matrix construction, score extraction |
+| `step_06_validation.py` | Grouped folds, per-model and ensemble cross-validation |
+| `step_07_ensemble.py` | Rank normalisation, weighted fusion, Platt calibration, full-data prediction |
+| `step_08_submission.py` | Submission construction, validation, atomic CSV writing |
+| `step_09_selfcheck.py` | 14 self-tests, including a synthetic end-to-end training run |
+| `execute_notebook.py` | Runs the notebook in a fresh kernel and reports metrics |
+| `submission.csv` | 1,000-row `Id,TARGET` export |
+| `training_report.json` | Data audits, CV metrics, environment, checks, notebook cell counts |
+| `requirements.txt` | Verified dependency versions |
 
 ## Reproduce
 
@@ -39,73 +114,61 @@ python3.11 -m venv .venv
 .venv/bin/python execute_notebook.py
 ```
 
-This regenerates the notebook outputs, `submissions.csv`, and `training_report.json`.
-After dependency installation, no internet, API token, GPU, or model download is
-required. Alternatively, open the notebook in a Jupyter-compatible application with
-these dependencies installed and run all cells in order.
+The run takes roughly 13 minutes on 2 CPU cores, regenerates the notebook
+outputs, `submission.csv`, and `training_report.json`, and fails on any cell
+error. The final lines report:
 
-A successful run prints `PASS: 40 checks`. Tests include both single-class cases,
-the binary ensemble and grouped cross-validation path, deterministic refitting,
-invalid inputs, conflicting duplicates, score bounds, metadata preservation, CSV
-round trips, strict binary-label enforcement, and word-ID/TF-IDF consistency. Synthetic test fixtures exercise software behavior only; they are never
-added to actual training data or reported as real validation performance.
-
-## Strict binary mode
-
-To prevent accidentally accepting the single-class baseline as a trained binary
-classifier, run:
-
-```bash
-.venv/bin/python execute_notebook.py --require-binary
+```
+Cells executed: 30 Python, 11 markdown
+Grouped CV ROC-AUC: baseline=0.94176, ensemble=0.97237
+Self-checks: 14/14 passed
+Notebook Python cells: 30
 ```
 
-With the supplied positive-only CSV, this command **intentionally exits with an
-error before fitting or writing artifacts**. It leaves existing notebook outputs,
-CSV, and report unchanged. In an interactive notebook, set `REQUIRE_BINARY = True`
-in the configuration cell for the same behavior. Normal mode explicitly permits
-the documented baseline export.
+Alternatively, open `modeltrain.ipynb` in Jupyter and run all cells in order.
 
-## Word-ID demonstration
+## Submission schema
 
-The notebook now fits an exploratory unigram TF-IDF vocabulary on the actual
-supplied text: **8,709 word IDs**, a **648 × 8,709** sparse matrix, and **98,740**
-nonzero weights. It displays token-to-ID pairs and the strongest TF-IDF features
-for an example prompt. Repeated normalized words share an ID; single-letter words
-are included; unknown tokens use `-1` in the demonstration encoder and are ignored
-in vectorizer transforms.
+```
+Id,TARGET
+1,0.451340
+4,0.421665
+...
+```
 
-This is unsupervised feature extraction, not successful binary classifier training.
-The exploratory vectorizer is never reused inside classifier evaluation: each
-training fold builds its own vocabulary to avoid leakage.
+- `Id` matches `test.csv` and `sample_submission.csv` order exactly.
+- `TARGET` is a calibrated score in `[0, 1]`; higher means more jailbreak-like.
+- 39.6% of test prompts score ≥ 0.5 and would be labelled `jailbreak` at that
+  threshold (the training positive rate is 40.0%).
 
-## Export schema
+## What is verified
 
-| Column | Meaning for the supplied file |
-| --- | --- |
-| `prompt_id` | Generated one-based source-row identifier, e.g. `row_000001`; not a competition ID. Stable for unchanged source-row order. |
-| `prompt_name` | Generated whitespace-normalized excerpt of the prompt, at most 100 characters; not original metadata and not necessarily unique. |
-| `jailbreak_probability` | Constant empirical-prior output `1.0` for this single-class dataset; not a validated risk estimate. |
+`step_09_selfcheck.py` runs 14 checks, all passing in the saved notebook:
 
-Existing `prompt_id` and `prompt_name` columns are preserved if supplied in future
-inputs; invalid blank or duplicate IDs are rejected. Full original prompts remain
-in `jailbreak.csv`.
+1. text normalisation (NFKC, zero-width/bidi stripping, idempotence),
+2. word-ID construction, reuse, unknown handling, and tokenisation,
+3. strict label parsing with rejection of unknown labels,
+4. training-frame schema / single-class / duplicate-id guards,
+5. test-frame and sample-submission alignment guards,
+6. 46 finite safeguard features with the expected direction on a planted
+   instruction-override prompt,
+7. TF-IDF union shape and term statistics,
+8. rank normalisation and weighted fusion bounds/monotonicity,
+9. Platt calibration bounds and monotonicity,
+10. grouped-fold coverage and duplicate-group isolation,
+11. exact/near duplicate and conflicting-label detection,
+12. submission round-trip, wrong-order / NaN / out-of-range / constant guards,
+13. model factory construction and a separable synthetic AUC of 1.000,
+14. deterministic model fits and deterministic folds.
 
-## Binary training path when real data becomes available
+## Limitations
 
-The notebook already implements an equal-weight soft-voting ensemble of word
-unigram/bigram TF-IDF and character 3–5-gram TF-IDF logistic regressions. This path
-runs only if the labeled input actually contains both benign (`0`/`false`/`benign`)
-and jailbreak (`1`/`true`/`jailbreak`) examples.
-
-It uses fixed hyperparameters and up to five stratified group folds. Vocabulary
-and IDF fitting happen inside each fold. Normalized duplicates are deduplicated;
-validation groups additionally collapse digit variants. Source/platform/community
-metadata is excluded from features. Per-model and ensemble out-of-fold ROC-AUC are
-reported only when class/group support permits valid folds. Semantic paraphrases
-can still cross groups; an independently collected holdout is necessary.
-
-For an actual competition, supply real two-class training data and the actual test
-CSV, set the notebook's `TRAIN_CSV` and `TEST_CSV` explicitly, and verify the export
-schema and IDs against the competition sample submission. Predicted probabilities
-from the binary path are model estimates; independent calibration has not been
-established. No leaderboard submission is uploaded automatically.
+- Cross-validation cannot guarantee the public leaderboard score; only a
+  submission can measure that.
+- Near-duplicate grouping uses a fixed 0.80 cosine threshold.
+- The model sees a single prompt, not conversation history; benign role-play and
+  adversarial role-play can be textually nearly identical.
+- Platt calibration is fitted on out-of-fold ranks; it preserves ordering (and
+  therefore ROC-AUC) but is not a full independent probability audit.
+- No external or fabricated training data is used, and the test prompts are never
+  given labels.

@@ -1,0 +1,492 @@
+{
+  "caveats": [
+    "Cross-validation scores are internal estimates, not public-leaderboard scores.",
+    "The test labels are not available, so no test-set score is reported here.",
+    "Near-duplicate grouping uses a 0.80 character TF-IDF cosine threshold.",
+    "The submission score is a calibrated ranking; AUC only depends on its ordering."
+  ],
+  "data": {
+    "cross_corpus_duplicates": {
+      "max_similarity": 0.9886915599094691,
+      "pairs_above_threshold": 14,
+      "rows_with_match_above_threshold": 14,
+      "threshold": 0.9
+    },
+    "duplicates": {
+      "exact_duplicate_rows": 0,
+      "largest_group": 13,
+      "near_duplicate_groups": 19,
+      "rows": 4000,
+      "rows_in_near_duplicate_groups": 60
+    },
+    "id_checks": {
+      "overlapping_ids": 0
+    },
+    "label_conflicts": {
+      "conflicting_groups": 0,
+      "conflicting_rows": 0,
+      "group_ids": []
+    },
+    "test": {
+      "columns": [
+        "Id",
+        "text"
+      ],
+      "empty_texts": 0,
+      "ids_match_sample_submission": true,
+      "mean_text_chars": 709.765,
+      "rows": 1000,
+      "sample_submission_order_matches_test": true,
+      "sample_submission_rows": 1000
+    },
+    "train": {
+      "class_counts": {
+        "benign": 2401,
+        "jailbreak": 1599
+      },
+      "columns": [
+        "Id",
+        "text",
+        "label"
+      ],
+      "empty_texts": 0,
+      "mean_text_chars": 711.8075,
+      "positive_rate": 0.39975,
+      "rows": 4000,
+      "unique_ids": 4000
+    },
+    "word_ids": {
+      "test_token_coverage": 0.9703169852806449,
+      "vocabulary_size": 21017
+    }
+  },
+  "ensemble": {
+    "method": "equal-weight percentile-rank fusion + Platt calibration",
+    "test_score_summary": {
+      "fraction_at_or_above_0.5": 0.501,
+      "fraction_below_0.5": 0.499,
+      "max": 0.9774392274392274,
+      "mean": 0.5,
+      "median": 0.5016650016650017,
+      "min": 0.034215784215784216,
+      "rows": 1000,
+      "unique_values": 931
+    },
+    "weights": {
+      "complement_nb": 1.0,
+      "knn10": 1.0,
+      "knn20": 1.0,
+      "lgbm": 1.0,
+      "logreg": 1.0,
+      "svc": 1.0
+    }
+  },
+  "environment": {
+    "lightgbm": "4.7.0",
+    "numpy": "2.4.6",
+    "pandas": "3.0.6",
+    "python": "3.11.2",
+    "scikit_learn": "1.9.1",
+    "scipy": "1.17.1"
+  },
+  "features": {
+    "char_ngram_range": [
+      2,
+      6
+    ],
+    "min_df": 2,
+    "safeguard_feature_count": 46,
+    "test_matrix_shape": [
+      1000,
+      194024
+    ],
+    "train_matrix_shape": [
+      4000,
+      194024
+    ],
+    "word_ngram_range": [
+      1,
+      3
+    ]
+  },
+  "generated_at_utc": "2026-10-19T20:47:06.792496+00:00",
+  "notebook": {
+    "markdown_cells": 11,
+    "python_cells": 30,
+    "total_cells": 41
+  },
+  "project": "jailbreak prompt classification",
+  "self_checks": {
+    "checks": [
+      {
+        "detail": "sample normalised to 'ignore all previous instructions\\n\\nnow'",
+        "name": "text_normalisation",
+        "passed": true
+      },
+      {
+        "detail": "vocabulary=5 ids=[0, -1, 2]",
+        "name": "word_ids",
+        "passed": true
+      },
+      {
+        "detail": "benign/jailbreak, 0/1, true/false supported; unknown labels rejected",
+        "name": "label_parsing",
+        "passed": true
+      },
+      {
+        "detail": "schema, single-class, duplicate-id, and id-overlap guards all fire",
+        "name": "frame_validation",
+        "passed": true
+      },
+      {
+        "detail": "46 safeguard features are finite and discriminative",
+        "name": "safeguard_features",
+        "passed": true
+      },
+      {
+        "detail": "union matrix shape=(3, 401), nnz=474",
+        "name": "tfidf_features",
+        "passed": true
+      },
+      {
+        "detail": "rank normalisation and weighted fusion are bounded and monotone",
+        "name": "rank_and_blend",
+        "passed": true
+      },
+      {
+        "detail": "Platt-scaled scores stay in [0, 1] and monotone",
+        "name": "calibration",
+        "passed": true
+      },
+      {
+        "detail": "grouped folds cover each row once and never split a duplicate group",
+        "name": "grouped_folds",
+        "passed": true
+      },
+      {
+        "detail": "exact/near duplicates and label conflicts are detected",
+        "name": "duplicate_detection",
+        "passed": true
+      },
+      {
+        "detail": "CSV round-trip and Id/score validation guards work",
+        "name": "submission_roundtrip",
+        "passed": true
+      },
+      {
+        "detail": "6 models construct; synthetic AUC=1.000",
+        "name": "model_factories",
+        "passed": true
+      },
+      {
+        "detail": "model fits and fold splits are deterministic",
+        "name": "determinism",
+        "passed": true
+      },
+      {
+        "detail": "export target is submission.csv",
+        "name": "export_path",
+        "passed": true
+      }
+    ],
+    "passed": 14,
+    "total": 14
+  },
+  "submission": {
+    "path": "submission.csv",
+    "probability_summary": {
+      "fraction_at_or_above_0.5": 0.396,
+      "fraction_below_0.5": 0.604,
+      "max": 0.992468170559494,
+      "mean": 0.39675725431621434,
+      "median": 0.21805037262864177,
+      "min": 0.0006567663690777773,
+      "rows": 1000,
+      "unique_values": 931
+    },
+    "roundtrip": {
+      "columns": [
+        "Id",
+        "TARGET"
+      ],
+      "fraction_at_or_above_0.5": 0.396,
+      "ids_match_test_order": true,
+      "rows": 1000,
+      "score_max": 0.992468,
+      "score_mean": 0.396757265,
+      "score_min": 0.000657,
+      "unique_scores": 931
+    },
+    "stats": {
+      "columns": [
+        "Id",
+        "TARGET"
+      ],
+      "fraction_at_or_above_0.5": 0.396,
+      "ids_match_test_order": true,
+      "path": "/home/user/modeltrain/submission.csv",
+      "rows": 1000,
+      "score_max": 0.992468,
+      "score_mean": 0.396757265,
+      "score_min": 0.000657,
+      "unique_scores": 931
+    }
+  },
+  "validation": {
+    "baseline": {
+      "fold_aucs": [
+        0.9348893229166666,
+        0.93599609375,
+        0.94419921875,
+        0.9503059895833332,
+        0.9410319410319411,
+        0.9449153645833334,
+        0.94138671875,
+        0.9337630208333334,
+        0.95771484375,
+        0.9333676575055885
+      ],
+      "mean_roc_auc": 0.9417570171454196,
+      "std_roc_auc": 0.007476485255557295
+    },
+    "protocol": "stratified grouped 5-fold CV; near-duplicate prompts share a fold",
+    "results": {
+      "baseline": {
+        "fold_aucs": [],
+        "mean_auc": null,
+        "std_auc": null
+      },
+      "ensemble": {
+        "fold_aucs": [
+          0.968434,
+          0.975573,
+          0.972298,
+          0.969443,
+          0.975114,
+          0.972471,
+          0.972132,
+          0.971702,
+          0.979378,
+          0.967163
+        ],
+        "mean_auc": 0.9723709027046852,
+        "per_seed": {
+          "42": {
+            "mean_fold_auc": 0.9721725173647318,
+            "std_fold_auc": 0.002886283336422323
+          },
+          "7": {
+            "mean_fold_auc": 0.9725692880446383,
+            "std_fold_auc": 0.00391264129714951
+          }
+        },
+        "std_auc": 0.003443697642395867
+      },
+      "fold_metadata": [
+        {
+          "fold": 1,
+          "n_train": 3200,
+          "n_validation": 800,
+          "seed": 42,
+          "validation_positive_rate": 0.4
+        },
+        {
+          "fold": 2,
+          "n_train": 3200,
+          "n_validation": 800,
+          "seed": 42,
+          "validation_positive_rate": 0.4
+        },
+        {
+          "fold": 3,
+          "n_train": 3200,
+          "n_validation": 800,
+          "seed": 42,
+          "validation_positive_rate": 0.4
+        },
+        {
+          "fold": 4,
+          "n_train": 3200,
+          "n_validation": 800,
+          "seed": 42,
+          "validation_positive_rate": 0.4
+        },
+        {
+          "fold": 5,
+          "n_train": 3200,
+          "n_validation": 800,
+          "seed": 42,
+          "validation_positive_rate": 0.39875
+        },
+        {
+          "fold": 1,
+          "n_train": 3200,
+          "n_validation": 800,
+          "seed": 7,
+          "validation_positive_rate": 0.4
+        },
+        {
+          "fold": 2,
+          "n_train": 3200,
+          "n_validation": 800,
+          "seed": 7,
+          "validation_positive_rate": 0.4
+        },
+        {
+          "fold": 3,
+          "n_train": 3200,
+          "n_validation": 800,
+          "seed": 7,
+          "validation_positive_rate": 0.4
+        },
+        {
+          "fold": 4,
+          "n_train": 3200,
+          "n_validation": 800,
+          "seed": 7,
+          "validation_positive_rate": 0.4
+        },
+        {
+          "fold": 5,
+          "n_train": 3200,
+          "n_validation": 800,
+          "seed": 7,
+          "validation_positive_rate": 0.39875
+        }
+      ],
+      "integrity": {
+        "42": {
+          "every_row_validated_once": true,
+          "groups_split_across_folds": 0
+        },
+        "7": {
+          "every_row_validated_once": true,
+          "groups_split_across_folds": 0
+        }
+      },
+      "model_names": [
+        "logreg",
+        "svc",
+        "complement_nb",
+        "knn10",
+        "knn20",
+        "lgbm"
+      ],
+      "n_splits": 5,
+      "per_model": {
+        "complement_nb": {
+          "fold_aucs": [
+            0.947871,
+            0.955664,
+            0.958568,
+            0.948561,
+            0.960004,
+            0.949811,
+            0.959974,
+            0.952168,
+            0.963021,
+            0.946604
+          ],
+          "mean_auc": 0.9542245858475653,
+          "std_auc": 0.005647836696610516
+        },
+        "knn10": {
+          "fold_aucs": [
+            0.946198,
+            0.95793,
+            0.944678,
+            0.9507,
+            0.959065,
+            0.958568,
+            0.953675,
+            0.953766,
+            0.951484,
+            0.95625
+          ],
+          "mean_auc": 0.9532313578748788,
+          "std_auc": 0.004756805186729492
+        },
+        "knn20": {
+          "fold_aucs": [
+            0.947702,
+            0.959264,
+            0.951003,
+            0.956452,
+            0.963178,
+            0.955898,
+            0.955456,
+            0.956673,
+            0.964147,
+            0.95784
+          ],
+          "mean_auc": 0.9567612524824943,
+          "std_auc": 0.004700390030024012
+        },
+        "lgbm": {
+          "fold_aucs": [
+            0.951081,
+            0.946484,
+            0.949668,
+            0.953444,
+            0.944942,
+            0.951999,
+            0.948464,
+            0.947324,
+            0.953815,
+            0.944115
+          ],
+          "mean_auc": 0.9491335534890224,
+          "std_auc": 0.0032600682294454063
+        },
+        "logreg": {
+          "fold_aucs": [
+            0.960521,
+            0.967129,
+            0.968848,
+            0.964128,
+            0.96585,
+            0.964375,
+            0.966022,
+            0.963639,
+            0.974323,
+            0.958674
+          ],
+          "mean_auc": 0.965350812710996,
+          "std_auc": 0.0041215541954202186
+        },
+        "svc": {
+          "fold_aucs": [
+            0.962005,
+            0.968451,
+            0.969753,
+            0.964206,
+            0.966378,
+            0.964271,
+            0.966484,
+            0.966178,
+            0.974583,
+            0.959235
+          ],
+          "mean_auc": 0.9661543122092018,
+          "std_auc": 0.004023304204245736
+        }
+      },
+      "seeds": [
+        42,
+        7
+      ],
+      "weights": {
+        "complement_nb": 1.0,
+        "knn10": 1.0,
+        "knn20": 1.0,
+        "lgbm": 1.0,
+        "logreg": 1.0,
+        "svc": 1.0
+      }
+    },
+    "seeds": [
+      42,
+      7
+    ]
+  }
+}
