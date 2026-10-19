@@ -44,11 +44,39 @@ After dependency installation, no internet, API token, GPU, or model download is
 required. Alternatively, open the notebook in a Jupyter-compatible application with
 these dependencies installed and run all cells in order.
 
-A successful run prints `PASS: 29 checks`. Tests include both single-class cases,
+A successful run prints `PASS: 40 checks`. Tests include both single-class cases,
 the binary ensemble and grouped cross-validation path, deterministic refitting,
-invalid inputs, conflicting duplicates, score bounds, metadata preservation, and CSV
-round trips. Synthetic test fixtures exercise software behavior only; they are never
+invalid inputs, conflicting duplicates, score bounds, metadata preservation, CSV
+round trips, strict binary-label enforcement, and word-ID/TF-IDF consistency. Synthetic test fixtures exercise software behavior only; they are never
 added to actual training data or reported as real validation performance.
+
+## Strict binary mode
+
+To prevent accidentally accepting the single-class baseline as a trained binary
+classifier, run:
+
+```bash
+.venv/bin/python execute_notebook.py --require-binary
+```
+
+With the supplied positive-only CSV, this command **intentionally exits with an
+error before fitting or writing artifacts**. It leaves existing notebook outputs,
+CSV, and report unchanged. In an interactive notebook, set `REQUIRE_BINARY = True`
+in the configuration cell for the same behavior. Normal mode explicitly permits
+the documented baseline export.
+
+## Word-ID demonstration
+
+The notebook now fits an exploratory unigram TF-IDF vocabulary on the actual
+supplied text: **8,709 word IDs**, a **648 × 8,709** sparse matrix, and **98,740**
+nonzero weights. It displays token-to-ID pairs and the strongest TF-IDF features
+for an example prompt. Repeated normalized words share an ID; single-letter words
+are included; unknown tokens use `-1` in the demonstration encoder and are ignored
+in vectorizer transforms.
+
+This is unsupervised feature extraction, not successful binary classifier training.
+The exploratory vectorizer is never reused inside classifier evaluation: each
+training fold builds its own vocabulary to avoid leakage.
 
 ## Export schema
 

@@ -14,6 +14,15 @@
     "1": 648
   },
   "train_sha256": "034377a4a1b88acde9d99d1017d893214c458fc98a59b676efca3d4090c66253",
+  "exploratory_word_ids": {
+    "vocabulary_size": 8709,
+    "sparse_matrix_rows": 648,
+    "sparse_matrix_columns": 8709,
+    "nonzero_values": 98740,
+    "unknown_token_id": -1,
+    "used_for_classifier_evaluation": false
+  },
+  "binary_data_available": false,
   "export_rows": 666,
   "export_scope": "training_rows_in_sample_no_test_supplied",
   "prompt_ids": "generated_one_based_source_row",
@@ -21,8 +30,19 @@
   "leaderboard_submission_ready": false,
   "leaderboard_note": "No competition test/sample submission or leaderboard evaluation was supplied.",
   "self_tests": {
-    "passed": 29,
+    "passed": 40,
     "checks": [
+      "strict mode rejects positive-only labels",
+      "strict mode rejects negative-only labels",
+      "strict mode accepts both classes and opt-out",
+      "one word per feature ID",
+      "feature IDs are consecutive",
+      "vocabulary and TF-IDF columns align",
+      "sparse feature values finite",
+      "repeated words share ID",
+      "unknown token sentinel",
+      "unknown tokens ignored in TF-IDF",
+      "single-letter word IDs",
       "label parsing",
       "reject unknown labels",
       "reject missing labels",
