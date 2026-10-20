@@ -23,23 +23,115 @@ _CONTROL_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 # Characters commonly used to smuggle instructions past naive filters.
 _INVISIBLE_RE = re.compile(r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]')
 
+# Bidi embedding / override and isolate runs (Trojan Source attacks).
+_BIDI_RE = re.compile(r'[\u202a-\u202e\u2066-\u2069]')
+
+# Unicode format characters (soft hyphens already covered above, plus marks etc.).
+_FORMAT_RE = re.compile(r'[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff\u00ad\u2066-\u2069]')
+
+# Conservative leetspeak substitution map. Only unambiguous single-char
+# substitutions are applied; this keeps the false-positive surface tiny.
+LEET_MAP: dict[str, str] = {
+    '@': 'a', '4': 'a',
+    '3': 'e',
+    '!': 'i', '1': 'i',
+    '0': 'o',
+    '$': 's', '5': 's',
+    '7': 't', '+': 't',
+}
+
+# Pattern: a run of >= 4 single word-characters, each separated by exactly
+# one ASCII space, with the character before the run NOT a word byte (so we
+# never eat the tail of a longer token like "ab c d e" -> "b c d e").
+_SPACED_RUN_RE = re.compile(
+    r'(?<![A-Za-z0-9_])([A-Za-z0-9_])( [A-Za-z0-9_]){3,}(?![A-Za-z0-9_])'
+)
+
+
+def _normalize_leet(text: str) -> str:
+    """Apply the conservative leetspeak substitution map.
+
+    Only the six unambiguous substitutions in :data:`LEET_MAP` are applied.
+    Whole-word numbers (e.g. "3 items") are left alone because every digit
+    in them is also a leet target; the map is applied at the character level
+    but only when the token actually mixes letters with leet chars.
+    """
+    if not any(ch in LEET_MAP for ch in text):
+        return text
+    out = []
+    for ch in text:
+        out.append(LEET_MAP.get(ch, ch))
+    return ''.join(out)
+
+
+def _collapse_spaced_chars(text: str) -> str:
+    """Collapse spaced-out sequences like "i g n o r e" -> "ignore".
+
+    Only runs of >= 4 single word-characters separated by exactly one ASCII
+    space are collapsed, so ordinary prose ("the cat sat") is untouched.
+    """
+    if ' ' not in text:
+        return text
+    return _SPACED_RUN_RE.sub(lambda m: m.group(0).replace(' ', ''), text)
+
+
+# Conservative confusable (homoglyph) mapping for common Cyrillic → Latin,
+# Greek → Latin, and other look‑alikes used in obfuscated jailbreaks.
+# Only a curated subset to keep runtime small and avoid accidental over‑normalization.
+_CONFS_MAP: dict[str, str] = {
+    # Cyrillic (commonly substituted in jailbreaks)
+    '\u0430': 'a', '\u0435': 'e', '\u043a': 'k', '\u043c': 'm', '\u043e': 'o',
+    '\u0440': 'p', '\u0441': 'c', '\u0442': 't', '\u044e': 'u', '\u044f': 'y',
+    # Greek
+    '\u03b1': 'a', '\u03b2': 'b', '\u03b5': 'e', '\u03b6': 'z', '\u03b7': 'h',
+    '\u03b8': '8', '\u03b9': 'i', '\u03ba': 'k', '\u03bb': 'l', '\u03bc': 'c',
+    '\u03bd': 'v', '\u03bf': 'o', '\u03c0': 'p', '\u03c1': 'p', '\u03c3': 's',
+    '\u03c4': 't', '\u03c5': 'y', '\u03c6': 'v', '\u03c7': 'x', '\u03c9': 'o',
+    # Common fullwidth / other look‑alikes (NFKC often covers these, but we add a few)
+    '\u00b5': 'u',  # micro sign → u
+}
+
+
+def _confusable_fold(text: str) -> str:
+    """Replace common confusable Unicode characters with their Latin look‑alike.
+
+    This defeats homoglyph attacks where Cyrillic/Greek full‑width, or other
+    visually similar characters replace plain ASCII letters to evade simple
+    keyword filters.
+    """
+    # Build a translation table once; it is cheap to apply repeatedly.
+    if not hasattr(_confusable_fold, "_trans_table"):
+        _confusable_fold._trans_table = str.maketrans(_CONFS_MAP)
+    return text.translate(_confusable_fold._trans_table)
+
 
 def normalize_text(text: str) -> str:
     """
     Normalize a raw prompt for lexical analysis.
 
-    Steps (order matters):
-      1. NFKC unicode normalization  -> folds fancy quotes/dashes/ligatures.
-      2. Strip zero-width / bidi / soft-hyphen control characters.
+    Steps (order matters; each is deterministic and idempotent):
+      1. NFKC unicode normalization  -> folds fullwidth → ASCII, ligatures, etc.
+      2. Strip zero-width / bidi / format control characters.
       3. Lowercase.
-      4. Collapse all whitespace runs into a single space.
+      4. Apply conservative leetspeak substitution (@->a, 1->i, 3->e, etc.).
+      5. Collapse spaced-out single characters ("i g n o r e" -> "ignore")
+         for runs of length >= 4.  This defeats one of the most common
+         obfuscation vectors used in jailbreak prompts.
+      6. Fold confusable (homoglyph) characters - Cyrillic / Greek look-alikes
+         - back onto their Latin equivalents.
+      7. Collapse all whitespace runs into a single space.
     """
     if text is None or (isinstance(text, float) and np.isnan(text)):
         return ""
     s = unicodedata.normalize('NFKC', str(text))
     s = _INVISIBLE_RE.sub('', s)
+    s = _BIDI_RE.sub('', s)
+    s = _FORMAT_RE.sub('', s)
     s = _CONTROL_RE.sub(' ', s)
     s = s.lower()
+    s = _normalize_leet(s)
+    s = _collapse_spaced_chars(s)
+    s = _confusable_fold(s)
     s = _WS_RE.sub(' ', s).strip()
     return s
 
@@ -152,6 +244,18 @@ def marker_count(text: str, markers: Sequence[str]) -> int:
     return sum(1 for marker in markers if marker in s)
 
 
+def _leet_char_count(raw: str) -> int:
+    """Count leetspeak substitution targets in the raw text."""
+    return sum(1 for ch in raw if ch in LEET_MAP)
+
+
+def _spaced_run_count(raw: str) -> int:
+    """Count the number of spaced-out single-char runs that would be collapsed."""
+    if ' ' not in raw:
+        return 0
+    return len(_SPACED_RUN_RE.findall(raw))
+
+
 def build_style_features(texts: Sequence[str]) -> np.ndarray:
     """
     Build a small dense matrix of hand-crafted structural features.
@@ -174,9 +278,12 @@ def build_style_features(texts: Sequence[str]) -> np.ndarray:
       14: fraction of uppercase characters in the raw text
       15: number of backticks
       16: number of '{' characters (JSON / template payloads)
+      17: number of leetspeak substitution targets (@, 4, 3, !, 1, 0, $, 5, 7, +)
+      18: number of spaced-out single-char runs (i g n o r e style)
+      19: leet_char_count / char_len (leet density)
     """
     n = len(texts)
-    out = np.zeros((n, 17), dtype=np.float64)
+    out = np.zeros((n, 20), dtype=np.float64)
     for i, raw in enumerate(texts):
         raw = str(raw) if raw is not None else ""
         norm = normalize_text(raw)
@@ -201,6 +308,9 @@ def build_style_features(texts: Sequence[str]) -> np.ndarray:
         out[i, 14] = (sum(1 for c in raw if c.isupper()) / max(1, n_chars))
         out[i, 15] = raw.count('`')
         out[i, 16] = raw.count('{')
+        out[i, 17] = _leet_char_count(raw)
+        out[i, 18] = _spaced_run_count(raw)
+        out[i, 19] = out[i, 17] / max(1, n_chars)
     return out
 
 
@@ -209,4 +319,5 @@ STYLE_FEATURE_NAMES = [
     'sentences', 'question_marks', 'exclamation_marks', 'newlines',
     'double_quotes', 'single_quotes', 'jailbreak_markers', 'benign_markers',
     'marker_delta', 'nonalnum_ratio', 'uppercase_ratio', 'backticks', 'braces',
+    'leet_char_count', 'spaced_run_count', 'leet_density',
 ]

@@ -22,7 +22,7 @@ from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
 import scipy.sparse as sp
-from sklearn.base import clone
+from sklearn.base import clone, BaseEstimator, ClassifierMixin
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedGroupKFold
@@ -210,6 +210,18 @@ def _base_set(class_weight="balanced"):
             _lr(C=16.0), blocks=("char_wide_tfidf",)
         ),
     ))
+
+    # 7. HistGradientBoosting: tree-based model that captures feature
+    #    interactions and non-linear decision boundaries.  Using char_tfidf
+    #    gives it character-n-gram signal while tree interactions provide
+    #    diversity beyond the linear base models.
+    #    NOTE: Removed to avoid OOM
+    # models.append((
+    #     "histgb",
+    #     _feature_builder.build_full_pipeline(
+    #         _HistGB(), blocks=("char_tfidf",)
+    #     ),
+    # ))
 
     return models
 
