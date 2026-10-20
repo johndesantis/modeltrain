@@ -3,8 +3,8 @@
 Binary classifier that separates **jailbreak** prompts from **benign** prompts and
 exports a jailbreak likelihood in `[0, 1]` for every prompt in `test.csv`.
 
-**Offline result: grouped 5-fold cross-validation ROC-AUC = `0.96421`**
-(95% bootstrap CI `[0.95932, 0.96908]`), accuracy `0.8955` and F1 `0.8727` at the
+**Offline result: grouped 5-fold cross-validation ROC-AUC = `0.96400`**
+(95% bootstrap CI `[0.95893, 0.96893]`), accuracy `0.8988` and F1 `0.8763` at the
 `TARGET >= 0.5` operating point.
 
 > The offline number is an estimate computed on the training split with
@@ -27,7 +27,7 @@ The exported `submission.csv` is validated against `sample_submission.csv`
 | --- | --- |
 | `modeltrain.ipynb` | The project. 11 code cells, saved with the outputs of a successful fresh-kernel execution. |
 | `1_data_loader.py` | Load `train.csv` / `test.csv`, validate the schema, assert there is no train/test leakage. |
-| `2_preprocessor.py` | Unicode/whitespace normalisation, the **word-ID** encoder, style features. |
+| `2_preprocessor.py` | Obfuscation-resistant normalisation (NFKC, zero-width/bidi strip, leetspeak fold, spaced-run collapse, homoglyph fold), the **word-ID** encoder, style features. |
 | `3_feature_builder.py` | TF-IDF word / character feature blocks and the full feature union. |
 | `4_model_trainer.py` | Near-duplicate grouping, base models, grouped CV, stacking. |
 | `5_evaluator.py` | ROC-AUC and supporting metrics, threshold sweep, bootstrap CI. |
@@ -62,6 +62,11 @@ cross-validation loop.
 
 * **Schema and label checks** - required columns, no missing text, ids unique and
   within range, labels restricted to `benign` / `jailbreak`.
+* **Text normalisation** - NFKC unification, zero-width/bidi/format control
+  stripping, leetspeak substitution (`1→i`, `0→o`, `3→e`, `@→a`, `$→s`), spaced-run
+  collapse (`i g n o r e` → `ignore` for runs >= 4 chars), and homoglyph folding
+  (common Cyrillic/Greek look-alikes to ASCII). This makes the lexical features
+  robust against the obfuscation vector commonly used in prompt injection attacks.
 * **No train/test leakage** - normalised (NFKC, lowercased, whitespace-collapsed)
   train and test prompts are intersected; the overlap must be empty. It is empty
   for the supplied data (0 shared prompts of 4000 / 1000).
@@ -87,6 +92,7 @@ Two complementary views of each prompt:
 | --- | --- | --- |
 | `word_tfidf` | word 1-2 grams, `min_df=2`, sublinear TF, `strip_accents='unicode'` | captures the vocabulary a jailbreak uses |
 | `char_tfidf` | `char_wb` 2-6 grams, `min_df=2`, sublinear TF | captures the *shape* of the text and survives typos, casing tricks and zero-width characters |
+| `char_wide_tfidf` | `char_wb` 2-8 grams, `min_df=3`, sublinear TF | captures longer-range obfuscation patterns |
 
 The character view is the stronger single model and is also the one that
 generalises best against obfuscation, which matches the prompt-injection
