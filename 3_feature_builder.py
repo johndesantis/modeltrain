@@ -162,6 +162,23 @@ def _char_block(ngram_range=(2, 6), min_df=2) -> Pipeline:
     ])
 
 
+def _char_wide_block(ngram_range=(2, 8), min_df=3) -> Pipeline:
+    """Wider character n-gram TF-IDF block for capturing longer-range
+    obfuscation patterns.
+    """
+    return Pipeline([
+        ("tfidf", TfidfVectorizer(
+            analyzer="char_wb",
+            ngram_range=ngram_range,
+            min_df=min_df,
+            max_df=0.995,
+            sublinear_tf=True,
+            lowercase=True,
+            dtype=np.float32,
+        )),
+    ])
+
+
 def _word_id_block() -> Pipeline:
     """Word-ID block (the issue's "place an id on every single word" feature).
 
@@ -193,6 +210,7 @@ def build_feature_union(blocks: Sequence[str] = ("word_tfidf", "char_tfidf")) ->
         "word_tfidf": _word_block,
         "char_tfidf": _char_block,
         "word_id": _word_id_block,
+        "char_wide_tfidf": _char_wide_block,
     }
     unknown = set(blocks) - set(available)
     if unknown:
